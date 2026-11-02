@@ -1,0 +1,2335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CYBERPUNK RUNNER 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Rajdhani:wght@600;700&family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b071a;
+            font-family: 'Inter', sans-serif;
+        }
+        .font-cyber {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .font-hud {
+            font-family: 'Rajdhani', sans-serif;
+        }
+        #webgl-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        /* Скошенные полоски здоровья и энергии как на референсе */
+        .skew-bar {
+            transform: skewX(-24deg);
+        }
+        .skew-bar-inner {
+            transform: skewX(24deg);
+        }
+        .hud-panel {
+            background: rgba(11, 14, 28, 0.72);
+            border: 1px solid rgba(0, 240, 255, 0.35);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .hex-avatar {
+            clip-path: polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%);
+        }
+        /* Круглые экшен-кнопки справа внизу */
+        .action-circle {
+            border-radius: 9999px;
+            backdrop-filter: blur(6px);
+            transition: transform 0.08s ease, box-shadow 0.12s ease, filter 0.1s ease;
+        }
+        .action-circle:active {
+            transform: scale(0.9);
+            filter: brightness(1.35);
+        }
+        .btn-fire-glow {
+            background: radial-gradient(circle, rgba(255, 20, 100, 0.38) 0%, rgba(18, 10, 30, 0.88) 75%);
+            border: 2.5px solid #ff2a6d;
+            box-shadow: 0 0 22px rgba(255, 42, 109, 0.65), inset 0 0 14px rgba(255, 42, 109, 0.4);
+        }
+        .btn-katana-glow {
+            background: radial-gradient(circle, rgba(255, 42, 109, 0.28) 0%, rgba(16, 10, 28, 0.88) 75%);
+            border: 2px solid #ff2a6d;
+            box-shadow: 0 0 16px rgba(255, 42, 109, 0.5), inset 0 0 10px rgba(255, 42, 109, 0.3);
+        }
+        .btn-sandy-glow {
+            background: radial-gradient(circle, rgba(0, 240, 255, 0.32) 0%, rgba(10, 20, 38, 0.88) 75%);
+            border: 2px solid #00f0ff;
+            box-shadow: 0 0 18px rgba(0, 240, 255, 0.6), inset 0 0 12px rgba(0, 240, 255, 0.35);
+        }
+        .btn-neutral-glow {
+            background: rgba(14, 18, 34, 0.82);
+            border: 1.5px solid rgba(180, 220, 255, 0.55);
+            box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+        }
+        #sandy-fx {
+            pointer-events: none;
+            position: absolute;
+            inset: 0;
+            z-index: 4;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            box-shadow: inset 0 0 110px rgba(0, 240, 255, 0.75), inset 0 0 220px rgba(255, 0, 128, 0.45);
+        }
+        #damage-fx {
+            pointer-events: none;
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            box-shadow: inset 0 0 130px rgba(255, 0, 55, 0.9);
+        }
+        #target-reticle {
+            position: absolute;
+            width: 54px;
+            height: 54px;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            display: none;
+            z-index: 6;
+        }
+    </style>
+</head>
+<body class="w-full h-full relative overflow-hidden select-none">
+
+    <!-- 3D Сцена -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- Экранные спецэффекты -->
+    <div id="sandy-fx"></div>
+    <div id="damage-fx"></div>
+
+    <!-- Прицел автонаведения на враге (как на скриншоте) -->
+    <div id="target-reticle">
+        <svg viewBox="0 0 64 64" class="w-full h-full animate-spin" style="animation-duration: 5s;">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#ff2a6d" stroke-width="2" stroke-dasharray="10 6"/>
+            <circle cx="32" cy="32" r="18" fill="none" stroke="#00f0ff" stroke-width="1.5" stroke-Opacity="0.8"/>
+            <line x1="32" y1="0" x2="32" y2="12" stroke="#ff2a6d" stroke-width="2"/>
+            <line x1="32" y1="52" x2="32" y2="64" stroke="#ff2a6d" stroke-width="2"/>
+            <line x1="0" y1="32" x2="12" y2="32" stroke="#ff2a6d" stroke-width="2"/>
+            <line x1="52" y1="32" x2="64" y2="32" stroke="#ff2a6d" stroke-width="2"/>
+            <circle cx="32" cy="32" r="3" fill="#00f0ff"/>
+        </svg>
+    </div>
+
+    <!-- ==================== ВЕРХНИЙ HUD (ТОЧНО ПО СКРИНШОТУ) ==================== -->
+    <div class="absolute top-0 left-0 w-full px-2.5 py-2 sm:px-4 sm:py-2.5 z-10 pointer-events-none flex justify-between items-start">
+
+        <!-- Левый верхний блок: Аватар героя + HP и ENERGY -->
+        <div class="flex items-center space-x-2 pointer-events-auto">
+            <!-- Гексагональный аниме-портрет (компактный) -->
+            <div class="relative w-11 h-12 sm:w-13 sm:h-14 flex items-center justify-center">
+                <div class="w-full h-full bg-gradient-to-b from-cyan-400 via-blue-600 to-purple-700 p-[2px] hex-avatar shadow-[0_0_12px_rgba(0,240,255,0.6)]">
+                    <div class="w-full h-full bg-[#101528] hex-avatar flex items-center justify-center overflow-hidden">
+                        <!-- SVG Аниме-портрет беловолосого героя -->
+                        <svg viewBox="0 0 100 100" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0%" stop-color="#1a103c"/>
+                                    <stop offset="100%" stop-color="#09203f"/>
+                                </linearGradient>
+                            </defs>
+                            <rect width="100" height="100" fill="url(#bgGrad)"/>
+                            <path d="M15 100 L30 68 L70 68 L85 100 Z" fill="#181b28" stroke="#00f0ff" stroke-width="2"/>
+                            <path d="M42 62 L42 76 L58 76 L58 62 Z" fill="#f3cfb6"/>
+                            <path d="M32 36 Q32 68 50 72 Q68 68 68 36 Z" fill="#ffdfc4"/>
+                            <ellipse cx="41" cy="50" rx="4.5" ry="3" fill="#00f0ff"/>
+                            <ellipse cx="59" cy="50" rx="4.5" ry="3" fill="#00f0ff"/>
+                            <circle cx="41" cy="50" r="1.8" fill="#061224"/>
+                            <circle cx="59" cy="50" r="1.8" fill="#061224"/>
+                            <path d="M35 44 L46 46" stroke="#8899aa" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M65 44 L54 46" stroke="#8899aa" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M46 61 Q50 64 55 60" stroke="#b57c68" stroke-width="1.8" fill="none"/>
+                            <path d="M22 44 L16 28 L30 30 L26 14 L42 24 L50 8 L58 24 L74 14 L70 30 L84 28 L78 44 L72 34 L64 46 L56 32 L50 44 L44 32 L36 46 L28 34 Z" fill="#eef5ff" stroke="#a5c4d4" stroke-width="1.2"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="absolute -bottom-1 bg-[#0b1022] border border-cyan-400/70 px-1.5 py-0 rounded text-[9px] font-hud font-bold text-white shadow">
+                    Lv 1 <span class="text-cyan-400">⚡</span>
+                </div>
+            </div>
+
+            <!-- Полоски HP и ENERGY -->
+            <div class="flex flex-col space-y-1">
+                <!-- HP BAR -->
+                <div class="w-32 sm:w-44 h-5 bg-[#141024]/90 border border-pink-500/75 skew-bar p-0.5 relative shadow-[0_0_10px_rgba(255,42,109,0.35)]">
+                    <div id="hp-fill" class="h-full bg-gradient-to-r from-[#e01e5a] via-[#ff2a6d] to-[#ff5e8e] transition-all duration-150" style="width: 100%;"></div>
+                    <div class="absolute inset-0 flex items-center justify-between px-2.5 skew-bar-inner text-[10px] sm:text-[11px] font-hud font-bold text-white drop-shadow">
+                        <span>HP</span>
+                        <span id="hp-text">320 / 320</span>
+                    </div>
+                </div>
+                <!-- ENERGY BAR -->
+                <div class="w-28 sm:w-36 h-3.5 bg-[#0d182e]/90 border border-cyan-400/75 skew-bar p-0.5 relative shadow-[0_0_8px_rgba(0,240,255,0.3)]">
+                    <div id="energy-fill" class="h-full bg-gradient-to-r from-[#0077ff] via-[#00c3ff] to-[#00f0ff] transition-all duration-150" style="width: 100%;"></div>
+                    <div class="absolute inset-0 flex items-center justify-between px-2 skew-bar-inner text-[8px] sm:text-[9px] font-hud font-bold text-cyan-100 drop-shadow">
+                        <span>ENERGY</span>
+                        <span id="energy-text">100 / 100</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Центральный верхний блок: Дистанция и Рекорд -->
+        <div class="flex flex-col items-center">
+            <div id="hud-distance" class="font-hud text-xl sm:text-3xl font-extrabold text-white tracking-wider drop-shadow-[0_2px_10px_rgba(0,240,255,0.75)] leading-none">
+                0 m
+            </div>
+            <div class="h-[1px] w-24 sm:w-32 bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent my-0.5"></div>
+            <div class="font-hud text-[10px] sm:text-[11px] font-bold tracking-widest text-amber-300/95 uppercase leading-none">
+                BEST <span id="hud-best">7,380 m</span>
+            </div>
+            <!-- Индикатор Комбо и Overdrive -->
+            <div id="hud-combo-box" class="mt-1 px-2.5 py-0.5 rounded-full bg-pink-600/30 border border-pink-400/70 text-[10px] font-cyber font-bold text-pink-200 shadow-[0_0_12px_rgba(255,42,109,0.6)] hidden">
+                COMBO <span id="hud-combo">x2</span> <span id="hud-overdrive" class="text-cyan-300 ml-1 hidden">⚡ OVERDRIVE</span>
+            </div>
+        </div>
+
+        <!-- Правый верхний блок: Кредиты, Убийства, Пауза -->
+        <div class="flex items-center space-x-1.5 sm:space-x-2 pointer-events-auto">
+            <!-- Счётчик монет -->
+            <div class="hud-panel px-2 py-1 rounded-lg flex items-center space-x-1.5">
+                <div class="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-[9px] font-black text-black shadow-[0_0_6px_#fbbf24]">₢</div>
+                <span id="hud-coins" class="font-hud text-xs sm:text-sm font-bold text-amber-300">0</span>
+            </div>
+            <!-- Счётчик уничтоженных врагов -->
+            <div class="hud-panel px-2 py-1 rounded-lg flex items-center space-x-1.5">
+                <svg class="w-3.5 h-3.5 text-pink-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C7.03 2 3 6.03 3 11c0 2.78 1.26 5.27 3.25 6.92V21c0 .55.45 1 1 1h9.5c.55 0 1-.45 1-1v-3.08C19.74 16.27 21 13.78 21 11c0-4.97-4.03-9-9-9zm-3 10c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 0c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+                </svg>
+                <span id="hud-kills" class="font-hud text-xs sm:text-sm font-bold text-white">0</span>
+            </div>
+            <!-- Кнопка Звука -->
+            <button id="btn-sound" class="hud-panel w-8 h-8 rounded-lg flex items-center justify-center text-cyan-300 active:scale-90 transition" title="Звук">
+                <span id="sound-label" class="text-xs font-bold">🔊</span>
+            </button>
+            <!-- Кнопка Паузы -->
+            <button id="btn-pause" class="hud-panel w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold active:scale-90 transition">
+                ❚❚
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== ЛЕВАЯ ПАМЯТКА И КОМПАКТНЫЙ ДЖОЙСТИК ==================== -->
+    <div class="hidden sm:flex absolute left-3 top-1/2 -translate-y-14 z-10 pointer-events-none flex-col space-y-1 hud-panel p-2 rounded-lg text-[11px] text-gray-200 border-white/15 bg-black/40">
+        <div class="flex items-center space-x-1.5">
+            <span class="w-4 h-4 rounded bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-[10px] font-bold text-cyan-300">↑</span>
+            <span>Прыжок</span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+            <span class="w-4 h-4 rounded bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-[10px] font-bold text-cyan-300">↓</span>
+            <span>Подкат</span>
+        </div>
+        <div class="flex items-center space-x-1.5">
+            <span class="w-4 h-4 rounded bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-[10px] font-bold text-cyan-300">↔</span>
+            <span>Полоса</span>
+        </div>
+    </div>
+
+    <!-- Виртуальный тактильный джойстик внизу слева (компактный, не закрывает обзор) -->
+    <div id="joystick-zone" class="absolute bottom-3.5 left-3.5 z-20 w-20 h-20 sm:w-24 sm:h-24 rounded-full border border-cyan-400/30 bg-black/30 backdrop-blur-sm flex items-center justify-center pointer-events-auto">
+        <span class="absolute top-1 text-[8px] text-cyan-300/60">▲</span>
+        <span class="absolute bottom-1 text-[8px] text-cyan-300/60">▼</span>
+        <span class="absolute left-1.5 text-[8px] text-cyan-300/60">◀</span>
+        <span class="absolute right-1.5 text-[8px] text-cyan-300/60">▶</span>
+        <div id="joystick-knob" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-cyan-400/25 border border-cyan-300/70 shadow-[0_0_10px_rgba(0,240,255,0.45)] transition-transform duration-75"></div>
+    </div>
+
+    <!-- ==================== ПРАВЫЙ НИЖНИЙ БЛОК КОМПАКТНЫХ БОЕВЫХ КНОПОК ==================== -->
+    <div class="absolute bottom-3 right-3 z-20 pointer-events-none flex flex-col items-end space-y-1.5">
+
+        <!-- Сандевистан -->
+        <div class="flex flex-col items-center pointer-events-auto mr-0.5">
+            <button id="btn-sandy" class="action-circle btn-sandy-glow w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center">
+                <svg class="w-6 h-6 text-cyan-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 4a2 2 0 100-4 2 2 0 000 4zM7 21l3-6 2 2v5h2v-6.5l-2.5-2.5 1-3.5 3 2.5H19v-2h-2.5l-3.5-3c-.7-.6-1.7-.7-2.5-.2L6 9.5V14h2v-3l2-1-1.5 4.5L5 19l2 2z"/>
+                    <path stroke-linecap="round" d="M2 10h3M1 14h4M2 18h2" stroke="#00f0ff" stroke-width="1.8"/>
+                </svg>
+            </button>
+            <span class="text-[9px] text-cyan-200 font-semibold mt-0.5 drop-shadow">Сандевистан [Q]</span>
+        </div>
+
+        <!-- Кибер-Рывок (Cyber Dash) -->
+        <div class="flex flex-col items-center pointer-events-auto mr-0.5">
+            <button id="btn-dash" class="action-circle btn-neutral-glow w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center text-amber-300 border-amber-400/70 shadow-[0_0_14px_rgba(251,191,36,0.45)]">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/>
+                </svg>
+            </button>
+            <span class="text-[9px] text-amber-200 font-semibold mt-0.5 drop-shadow">Рывок [SHIFT]</span>
+        </div>
+
+        <!-- Кнопка автоприцела -->
+        <div class="pointer-events-auto mr-1">
+            <button id="btn-aim" class="action-circle btn-neutral-glow w-9 h-9 flex items-center justify-center text-cyan-200">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="8"/>
+                    <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                    <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Нижний ряд: Смена оружия, Катана, Огонь -->
+        <div class="flex items-end space-x-2 sm:space-x-2.5 pointer-events-auto">
+            <!-- Смена оружия -->
+            <div class="flex flex-col items-center">
+                <button id="btn-swap" class="action-circle btn-neutral-glow w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-white">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+                <span class="text-[9px] text-gray-300 mt-0.5">Оружие</span>
+            </div>
+
+            <!-- Катана -->
+            <div class="flex flex-col items-center">
+                <button id="btn-katana" class="action-circle btn-katana-glow w-12 h-12 sm:w-13 sm:h-13 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 4.5l-11 11m0 0L5 19l-1.5-1.5L7 14m1.5 1.5l-2-2m13-9l-9 9"/>
+                    </svg>
+                </button>
+                <span class="text-[9px] text-gray-200 font-semibold mt-0.5">Катана [E]</span>
+            </div>
+
+            <!-- Огонь -->
+            <div class="flex flex-col items-center">
+                <button id="btn-fire" class="action-circle btn-fire-glow w-15 h-15 sm:w-16 sm:h-16 flex items-center justify-center">
+                    <svg class="w-9 h-9 text-pink-300 -rotate-25" viewBox="0 0 64 32" fill="currentColor">
+                        <path d="M4 14 L16 14 L18 10 L44 10 L46 13 L58 13 L58 16 L46 16 L44 19 L34 19 L32 27 L27 27 L29 19 L20 19 L17 25 L12 25 L14 18 L4 18 Z"/>
+                        <rect x="24" y="6" width="12" height="3" rx="1" fill="#ff99bb"/>
+                    </svg>
+                </button>
+                <span class="text-[10px] text-white font-bold mt-0.5">Огонь [SPACE]</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== МОДАЛЬНОЕ ОКНО ПАУЗЫ / GAME OVER ==================== -->
+    <div id="modal-overlay" class="absolute inset-0 z-30 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md hidden">
+        <div class="hud-panel max-w-md w-full p-6 sm:p-8 rounded-2xl text-center border-cyan-400/60 flex flex-col items-center shadow-[0_0_40px_rgba(0,240,255,0.3)]">
+            <h2 id="modal-title" class="font-cyber text-2xl sm:text-3xl font-extrabold text-white tracking-wider mb-1">ПАУЗА</h2>
+            <p id="modal-subtitle" class="text-xs font-hud uppercase tracking-widest text-cyan-300 mb-5">Нейролинк в режиме ожидания</p>
+
+            <div class="grid grid-cols-3 gap-2.5 w-full mb-6">
+                <div class="bg-white/5 p-3 rounded-xl border border-white/10">
+                    <div class="text-[10px] text-gray-400 uppercase font-bold">Дистанция</div>
+                    <div id="stat-dist" class="font-hud text-xl font-bold text-cyan-300 mt-0.5">0 m</div>
+                </div>
+                <div class="bg-white/5 p-3 rounded-xl border border-white/10">
+                    <div class="text-[10px] text-gray-400 uppercase font-bold">Кредиты</div>
+                    <div id="stat-coins" class="font-hud text-xl font-bold text-amber-300 mt-0.5">0</div>
+                </div>
+                <div class="bg-white/5 p-3 rounded-xl border border-white/10">
+                    <div class="text-[10px] text-gray-400 uppercase font-bold">Фраги</div>
+                    <div id="stat-kills" class="font-hud text-xl font-bold text-pink-400 mt-0.5">0</div>
+                </div>
+            </div>
+
+            <div class="flex flex-col space-y-3 w-full">
+                <button id="btn-resume" class="w-full py-3.5 rounded-xl font-cyber text-sm uppercase font-bold text-black bg-cyan-400 hover:bg-cyan-300 shadow-[0_0_20px_rgba(0,240,255,0.6)] active:scale-95 transition cursor-pointer">
+                    Продолжить
+                </button>
+                <button id="btn-restart" class="w-full py-3.5 rounded-xl font-cyber text-sm uppercase font-bold text-white bg-gradient-to-r from-pink-600 to-purple-600 shadow-[0_0_20px_rgba(255,42,109,0.5)] active:scale-95 transition cursor-pointer">
+                    Новый забег
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- 3D ДВИЖОК И ИГРОВАЯ ЛОГИКА                                                -->
+    <!-- ========================================================================= -->
+    <script>
+        // Инициализация глобальных переменных сцены, камеры и рендерера
+        let scene, camera, renderer;
+        const state = {
+            mode: 'PLAY', // PLAY, PAUSE, GAMEOVER
+            hp: 320,
+            maxHp: 320,
+            energy: 100,
+            maxEnergy: 100,
+            distance: 0,
+            bestDistance: parseInt(localStorage.getItem('cyber_runner_best3d') || '7380', 10),
+            coins: 286,
+            kills: 12,
+            speed: 36,
+            maxSpeed: 68,
+            sandyActive: false,
+            weaponMode: 0,
+            firing: false,
+            lastShot: 0,
+            katanaTimer: 0,
+            katanaDuration: 0.32,
+            slashComboStep: 0,
+            dashTimer: 0,
+            combo: 0,
+            comboTimer: 0,
+            shake: 0
+        };
+
+        // Контейнер для всплывающего урона и бонусов
+        const floatLayer = document.createElement('div');
+        floatLayer.className = 'absolute inset-0 pointer-events-none z-10 overflow-hidden';
+        document.body.appendChild(floatLayer);
+
+        function spawnFloatingText(worldPos, text, color = '#00f0ff') {
+            const v = worldPos.clone().project(camera);
+            if (v.z > 1) return;
+            const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+            const el = document.createElement('div');
+            el.className = 'font-cyber font-extrabold text-xs sm:text-sm absolute pointer-events-none transition-all duration-500';
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.color = color;
+            el.style.textShadow = `0 0 8px ${color}`;
+            el.textContent = text;
+            floatLayer.appendChild(el);
+            requestAnimationFrame(() => {
+                el.style.transform = 'translate(-50%, -36px) scale(1.15)';
+                el.style.opacity = '0';
+            });
+            setTimeout(() => el.remove(), 520);
+        }
+
+        // Базовая инициализация Three.js
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0b071a);
+        scene.fog = new THREE.FogExp2(0x0b071a, 0.007);
+
+        camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 400);
+
+        renderer = new THREE.WebGLRenderer({
+            canvas: document.getElementById('webgl-canvas'),
+            antialias: true,
+            powerPreference: 'high-performance'
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // Освещение сцены
+        const ambientLight = new THREE.AmbientLight(0x221840, 1.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0x00f0ff, 1.5);
+        dirLight.position.set(15, 30, 15);
+        scene.add(dirLight);
+
+        const neonPinkLight = new THREE.PointLight(0xff2a6d, 3.5, 45);
+        neonPinkLight.position.set(-8, 12, -20);
+        scene.add(neonPinkLight);
+
+        // ==========================================
+        // 1. Звуковой синтезатор (Web Audio API)
+        // ==========================================
+        class CyberAudio {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    if (AC) this.ctx = new AC();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+            }
+            play(f1, f2, dur, type = 'sawtooth', gainVal = 0.12) {
+                if (!this.enabled || !this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(f1, now);
+                    osc.frequency.exponentialRampToValueAtTime(Math.max(20, f2), now + dur);
+                    gain.gain.setValueAtTime(gainVal, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + dur);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + dur);
+                } catch (e) {}
+            }
+            shoot() { this.play(720, 110, 0.09, 'sawtooth', 0.11); }
+            katana() { this.play(1200, 260, 0.14, 'triangle', 0.2); }
+            jump() { this.play(220, 560, 0.16, 'sine', 0.14); }
+            slide() { this.play(340, 120, 0.18, 'triangle', 0.14); }
+            coin() {
+                this.play(880, 1320, 0.07, 'sine', 0.12);
+                setTimeout(() => this.play(1320, 1760, 0.1, 'sine', 0.12), 55);
+            }
+            hit() { this.play(130, 38, 0.26, 'sawtooth', 0.24); }
+            sandy() { this.play(240, 55, 0.45, 'sine', 0.22); }
+            dash() { this.play(180, 920, 0.22, 'sawtooth', 0.18); }
+            pickup() {
+                this.play(520, 880, 0.12, 'triangle', 0.15);
+                setTimeout(() => this.play(880, 1480, 0.16, 'sine', 0.15), 70);
+            }
+        }
+        const audio = new CyberAudio();
+
+        // ==========================================
+        // 2. Генератор процедурных HD-текстур (Canvas)
+        // ==========================================
+        function createWetAsphaltTexture() {
+            const c = document.createElement('canvas');
+            c.width = 1024;
+            c.height = 1024;
+            const ctx = c.getContext('2d');
+
+            // Глубокий мокрый асфальт с контрастными отражениями
+            const grad = ctx.createLinearGradient(0, 0, 1024, 0);
+            grad.addColorStop(0, '#160b2e');
+            grad.addColorStop(0.18, '#0c1428');
+            grad.addColorStop(0.5, '#090e1c');
+            grad.addColorStop(0.82, '#0c1428');
+            grad.addColorStop(1, '#220b2c');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            // Микрорельеф асфальта и зеркальные лужи
+            for (let i = 0; i < 900; i++) {
+                ctx.fillStyle = i % 4 === 0
+                    ? 'rgba(0, 240, 255, 0.08)'
+                    : (i % 3 === 0 ? 'rgba(255, 42, 109, 0.08)' : 'rgba(255, 255, 255, 0.035)');
+                const w = 14 + Math.random() * 110;
+                const h = 2 + Math.random() * 8;
+                ctx.fillRect(Math.random() * 1024, Math.random() * 1024, w, h);
+            }
+
+            // Подсветка центров трёх полос (чтобы игрок мгновенно считывал 3 коридора движения)
+            const laneCenters = [226, 512, 798];
+            laneCenters.forEach((lx, idx) => {
+                const laneGlow = ctx.createLinearGradient(lx - 90, 0, lx + 90, 0);
+                const col = idx === 1 ? '0, 240, 255' : '255, 42, 133';
+                laneGlow.addColorStop(0, `rgba(${col}, 0)`);
+                laneGlow.addColorStop(0.5, `rgba(${col}, 0.13)`);
+                laneGlow.addColorStop(1, `rgba(${col}, 0)`);
+                ctx.fillStyle = laneGlow;
+                ctx.fillRect(lx - 90, 0, 180, 1024);
+
+                // Тонкая направляющая техно-линия по центру каждой полосы
+                ctx.fillStyle = idx === 1 ? 'rgba(0, 240, 255, 0.35)' : 'rgba(255, 77, 166, 0.3)';
+                for (let y = 0; y < 1024; y += 128) {
+                    ctx.fillRect(lx - 2, y + 20, 4, 55);
+                }
+            });
+
+            // Яркие боковые аварийные линии у отбойников
+            ctx.shadowColor = '#ff9900';
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = '#ffaa00';
+            ctx.fillRect(16, 0, 14, 1024);
+            ctx.fillRect(994, 0, 14, 1024);
+
+            // Чёткие неоновые разделители между левой, центральной и правой полосой
+            ctx.shadowColor = '#00f0ff';
+            ctx.shadowBlur = 22;
+            ctx.fillStyle = '#00f0ff';
+            ctx.fillRect(364, 0, 10, 1024);
+            ctx.fillRect(650, 0, 10, 1024);
+
+            // Яркий белый сердечник линий разметки + пунктир
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = '#e8fbff';
+            for (let y = 0; y < 1024; y += 96) {
+                ctx.fillRect(366, y, 6, 58);
+                ctx.fillRect(652, y, 6, 58);
+            }
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(1, 3);
+            return tex;
+        }
+
+        function createBuildingWindowsTexture(accentColor) {
+            const c = document.createElement('canvas');
+            c.width = 256;
+            c.height = 512;
+            const ctx = c.getContext('2d');
+
+            ctx.fillStyle = '#0b0e1d';
+            ctx.fillRect(0, 0, 256, 512);
+
+            // Вертикальные архитектурные линии небоскрёба
+            ctx.fillStyle = '#141a33';
+            for (let x = 0; x < 256; x += 32) {
+                ctx.fillRect(x, 0, 4, 512);
+            }
+
+            // Светящиеся окна
+            for (let y = 12; y < 500; y += 18) {
+                for (let x = 8; x < 248; x += 24) {
+                    const r = Math.random();
+                    if (r > 0.38) {
+                        if (r > 0.88) ctx.fillStyle = accentColor;
+                        else if (r > 0.72) ctx.fillStyle = '#00f0ff';
+                        else if (r > 0.55) ctx.fillStyle = '#ffd166';
+                        else ctx.fillStyle = '#3a5088';
+                        ctx.fillRect(x, y, 14, 10);
+                    }
+                }
+            }
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            return tex;
+        }
+
+        // Генератор неоновых рекламных билбордов как на скриншоте (KIZUNA, NEXUS, ARASAKA, KIROSHI)
+        function createBillboardTexture(preset) {
+            const c = document.createElement('canvas');
+            c.width = 512;
+            c.height = 512;
+            const ctx = c.getContext('2d');
+
+            if (preset === 'KIZUNA') {
+                const g = ctx.createLinearGradient(0, 0, 512, 512);
+                g.addColorStop(0, '#3b0747');
+                g.addColorStop(0.5, '#9d176d');
+                g.addColorStop(1, '#1a0938');
+                ctx.fillStyle = g;
+                ctx.fillRect(0, 0, 512, 512);
+
+                // Силуэт розововолосой аниме-девушки
+                ctx.fillStyle = '#ff66cc';
+                ctx.beginPath();
+                ctx.arc(200, 210, 120, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ffe5ec';
+                ctx.beginPath();
+                ctx.arc(200, 225, 78, 0, Math.PI * 2);
+                ctx.fill();
+                // Глаза
+                ctx.fillStyle = '#c9184a';
+                ctx.fillRect(165, 215, 22, 14);
+                ctx.fillRect(215, 215, 22, 14);
+
+                ctx.shadowColor = '#ff00aa';
+                ctx.shadowBlur = 18;
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '900 58px Orbitron, sans-serif';
+                ctx.fillText('KIZUNA', 240, 370);
+                ctx.font = '700 34px Orbitron, sans-serif';
+                ctx.fillStyle = '#ff99dd';
+                ctx.fillText('BETTER', 240, 420);
+                ctx.fillText('HUMAN', 240, 462);
+            } else if (preset === 'NEXUS') {
+                const g = ctx.createLinearGradient(0, 0, 0, 512);
+                g.addColorStop(0, '#04284a');
+                g.addColorStop(0.6, '#0077b6');
+                g.addColorStop(1, '#031226');
+                ctx.fillStyle = g;
+                ctx.fillRect(0, 0, 512, 512);
+
+                // Кибер-портрет в голубых тонах
+                ctx.fillStyle = '#00f0ff';
+                ctx.beginPath();
+                ctx.arc(256, 175, 95, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#d8f3dc';
+                ctx.beginPath();
+                ctx.arc(256, 185, 68, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.shadowColor = '#00f0ff';
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.font = '900 72px Orbitron, sans-serif';
+                ctx.fillText('NEXUS', 256, 365);
+                ctx.font = '700 36px Orbitron, sans-serif';
+                ctx.fillStyle = '#90e0ef';
+                ctx.fillText('LIVE BOLDER', 256, 425);
+            } else if (preset === 'ARASAKA') {
+                ctx.fillStyle = '#180614';
+                ctx.fillRect(0, 0, 512, 512);
+                ctx.strokeStyle = '#ff2a55';
+                ctx.lineWidth = 10;
+                ctx.strokeRect(20, 20, 472, 472);
+
+                ctx.shadowColor = '#ff2a55';
+                ctx.shadowBlur = 25;
+                ctx.fillStyle = '#ff2a55';
+                ctx.beginPath();
+                ctx.arc(256, 195, 75, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.textAlign = 'center';
+                ctx.font = '900 62px Orbitron, sans-serif';
+                ctx.fillText('ARASAKA', 256, 365);
+                ctx.font = '700 32px sans-serif';
+                ctx.fillStyle = '#ffccd5';
+                ctx.fillText('アラサカ 04', 256, 425);
+            } else {
+                // KIROSHI
+                ctx.fillStyle = '#20072b';
+                ctx.fillRect(0, 0, 512, 512);
+                ctx.shadowColor = '#ff007f';
+                ctx.shadowBlur = 22;
+                ctx.fillStyle = '#ff4da6';
+                ctx.textAlign = 'center';
+                ctx.font = '900 68px Orbitron, sans-serif';
+                ctx.fillText('KIROSHI', 256, 220);
+                ctx.font = '900 84px sans-serif';
+                ctx.fillStyle = '#00f0ff';
+                ctx.fillText('キロシ', 256, 340);
+                ctx.font = '700 32px Orbitron, sans-serif';
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText('OPTICS MK.IV', 256, 425);
+            }
+            return new THREE.CanvasTexture(c);
+        }
+
+        // ==========================================
+        // 5. Создание детализированного 3D-Героя (Естественные пропорции и суставы)
+        // ==========================================
+        const playerGroup = new THREE.Group();
+        scene.add(playerGroup);
+
+        // Контурная подсветка героя со спины и снизу
+        const heroRimLight = new THREE.PointLight(0x00f0ff, 2.8, 10);
+        heroRimLight.position.set(0, 2.5, 2.4);
+        playerGroup.add(heroRimLight);
+
+        const jacketMat = new THREE.MeshStandardMaterial({ color: 0x16192b, roughness: 0.3, metalness: 0.75 });
+        const innerShirtMat = new THREE.MeshStandardMaterial({ color: 0x0d101d, roughness: 0.5, metalness: 0.4 });
+        const pantsMat = new THREE.MeshStandardMaterial({ color: 0x101320, roughness: 0.45, metalness: 0.45 });
+        const armorJointMat = new THREE.MeshStandardMaterial({ color: 0x2a314d, roughness: 0.25, metalness: 0.85 });
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xffd8be, roughness: 0.55 });
+        const whiteHairMat = new THREE.MeshStandardMaterial({ color: 0xf2f7ff, emissive: 0x263859, roughness: 0.28 });
+        const neonPinkMat = new THREE.MeshBasicMaterial({ color: 0xff1e78 });
+        const neonCyanMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+
+        // Главный узел туловища (позволяет наклонять и поворачивать торс при беге и ударах)
+        const PelvisNode = new THREE.Group();
+        PelvisNode.position.y = 1.02;
+        playerGroup.add(PelvisNode);
+
+        // Таз и тактический пояс с кобурой и подсумками
+        const hipsMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.22, 0.24, 14), pantsMat);
+        PelvisNode.add(hipsMesh);
+
+        const beltMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.255, 0.09, 14), armorJointMat);
+        beltMesh.position.y = 0.06;
+        const beltBuckle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.06), neonCyanMat);
+        beltBuckle.position.set(0, 0.06, 0.24);
+        PelvisNode.add(beltMesh, beltBuckle);
+
+        // Узел грудной клетки и куртки (TorsoPivot)
+        const torso = new THREE.Group();
+        torso.position.y = 0.12;
+        PelvisNode.add(torso);
+
+        // Анатомический V-образный торс (узкая талия, широкие плечи)
+        const lowerTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.22, 0.38, 14), innerShirtMat);
+        lowerTorso.position.y = 0.19;
+        torso.add(lowerTorso);
+
+        const chestJacket = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.26, 0.52, 16), jacketMat);
+        chestJacket.scale.set(1.15, 1, 0.78);
+        chestJacket.position.y = 0.56;
+        torso.add(chestJacket);
+
+        // Плечевые накладки куртки со светящимися неоновыми кантами
+        [-0.36, 0.36].forEach(sx => {
+            const pad = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 12), jacketMat);
+            pad.scale.set(1.1, 0.75, 0.95);
+            pad.position.set(sx, 0.78, 0);
+            const padTrim = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.018, 8, 16, Math.PI), neonCyanMat);
+            padTrim.position.set(sx, 0.79, 0);
+            padTrim.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
+            torso.add(pad, padTrim);
+        });
+
+        // Высокий стоячий воротник в стиле аниме-киберпанк с неоновым контуром
+        const collarMesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.26, 0.24, 0.24, 16, 1, true, -Math.PI * 0.75, Math.PI * 1.5),
+            jacketMat
+        );
+        collarMesh.material.side = THREE.DoubleSide;
+        collarMesh.position.set(0, 0.88, 0.02);
+        torso.add(collarMesh);
+
+        const collarNeon = new THREE.Mesh(new THREE.TorusGeometry(0.255, 0.02, 8, 20, Math.PI * 1.4), neonPinkMat);
+        collarNeon.rotation.x = Math.PI / 2;
+        collarNeon.rotation.z = -Math.PI * 0.2;
+        collarNeon.position.set(0, 0.99, 0.02);
+        torso.add(collarNeon);
+
+        // Светящаяся кибер-эмблема и сегменты нейро-импланта на спине
+        const backEmblem = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), neonPinkMat);
+        backEmblem.scale.set(1, 1.35, 0.18);
+        backEmblem.position.set(0, 0.58, 0.22);
+        torso.add(backEmblem);
+
+        for (let s = 0; s < 4; s++) {
+            const node = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.08, 8), neonCyanMat);
+            node.position.set(0, 0.24 + s * 0.14, 0.23);
+            torso.add(node);
+        }
+
+        // Диагональные ножны с катаной за спиной + рукоять над левым плечом
+        const sheathGroup = new THREE.Group();
+        const sheathBody = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.03, 1.45, 10), armorJointMat);
+        const sheathNeon = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.38, 0.075), neonPinkMat);
+        // Рукоять катаны (видна, пока меч в ножнах)
+        const katanaHiltInSheath = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.36, 10), jacketMat);
+        katanaHiltInSheath.position.y = 0.88;
+        const tsubaGuard = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.025, 12), neonCyanMat);
+        tsubaGuard.position.y = 0.71;
+        sheathGroup.add(sheathBody, sheathNeon, katanaHiltInSheath, tsubaGuard);
+        sheathGroup.position.set(-0.08, 0.55, 0.26);
+        sheathGroup.rotation.z = -0.56;
+        sheathGroup.rotation.x = 0.08;
+        torso.add(sheathGroup);
+
+        // Шея и скульптурная аниме-голова с объёмными колючими серебристыми прядями
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 0.96, 0);
+        torso.add(headGroup);
+
+        const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.095, 0.16, 12), skinMat);
+        neckMesh.position.y = 0.04;
+        headGroup.add(neckMesh);
+
+        const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 16), skinMat);
+        cranium.scale.set(0.95, 1.08, 0.98);
+        cranium.position.y = 0.22;
+        headGroup.add(cranium);
+
+        // Кибер-визор / очки на глазах
+        const heroVisor = new THREE.Mesh(new THREE.CylinderGeometry(0.215, 0.215, 0.07, 16, 1, false, Math.PI * 0.65, Math.PI * 0.7), neonCyanMat);
+        heroVisor.position.set(0, 0.23, -0.02);
+        headGroup.add(heroVisor);
+
+        // Многослойная аниме-причёска (sculpted spikes)
+        const hairCrown = new THREE.Mesh(new THREE.SphereGeometry(0.235, 14, 14), whiteHairMat);
+        hairCrown.position.set(0, 0.27, 0.02);
+        headGroup.add(hairCrown);
+
+        const spikeConeGeo = new THREE.ConeGeometry(0.085, 0.38, 6);
+        for (let i = 0; i < 18; i++) {
+            const spike = new THREE.Mesh(spikeConeGeo, whiteHairMat);
+            const ring = i < 10 ? 0 : 1;
+            const angle = (i / (ring === 0 ? 10 : 8)) * Math.PI * 2 + ring * 0.35;
+            const rad = ring === 0 ? 0.19 : 0.13;
+            spike.position.set(
+                Math.sin(angle) * rad,
+                0.28 + ring * 0.12 + (i % 2) * 0.04,
+                Math.cos(angle) * rad + 0.04
+            );
+            spike.rotation.x = Math.cos(angle) * 0.95 + 0.25;
+            spike.rotation.z = -Math.sin(angle) * 0.95;
+            headGroup.add(spike);
+        }
+
+        // Двухсуставные руки (Плечо -> Локоть -> Кисть)
+        function createArticulatedArm(isLeft) {
+            const shoulderPivot = new THREE.Group();
+            shoulderPivot.position.set(isLeft ? -0.42 : 0.42, 0.76, 0);
+
+            const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.08, 0.36, 12), jacketMat);
+            upperArm.position.y = -0.18;
+            shoulderPivot.add(upperArm);
+
+            const elbowJoint = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), armorJointMat);
+            elbowJoint.position.y = -0.36;
+            shoulderPivot.add(elbowJoint);
+
+            const forearmPivot = new THREE.Group();
+            forearmPivot.position.y = -0.36;
+            shoulderPivot.add(forearmPivot);
+
+            const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.068, 0.34, 12), armorJointMat);
+            forearm.position.y = -0.17;
+            const cyberBracer = new THREE.Mesh(new THREE.CylinderGeometry(0.086, 0.075, 0.16, 10), isLeft ? neonCyanMat : neonPinkMat);
+            cyberBracer.position.y = -0.2;
+            forearmPivot.add(forearm, cyberBracer);
+
+            const hand = new THREE.Mesh(new THREE.SphereGeometry(0.072, 10, 10), skinMat);
+            hand.position.y = -0.35;
+            forearmPivot.add(hand);
+
+            shoulderPivot.userData.forearm = forearmPivot;
+            return shoulderPivot;
+        }
+
+        const leftArm = createArticulatedArm(true);
+        const rightArm = createArticulatedArm(false);
+        torso.add(leftArm, rightArm);
+
+        // Детализированная импульсная кибер-винтовка в правой руке
+        const gunGroup = new THREE.Group();
+        const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.18, 0.68), armorJointMat);
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.45, 10), jacketMat);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(0, 0.03, -0.45);
+        const energyCore = new THREE.Mesh(new THREE.BoxGeometry(0.125, 0.055, 0.42), neonCyanMat);
+        energyCore.position.set(0, 0.04, -0.08);
+        const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.22, 10), neonPinkMat);
+        scope.rotation.x = Math.PI / 2;
+        scope.position.set(0, 0.12, -0.05);
+        gunGroup.add(receiver, barrel, energyCore, scope);
+
+        // Детализированный энергетический клинок катаны в левой руке (активируется при ударе)
+        const drawnKatanaGroup = new THREE.Group();
+        const kGrip = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.34, 10), jacketMat);
+        const kTsuba = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.025, 12), neonPinkMat);
+        kTsuba.position.y = -0.17;
+        // Обух и светящаяся плазменная кромка лезвия
+        const kSpine = new THREE.Mesh(new THREE.BoxGeometry(0.022, 1.48, 0.055), armorJointMat);
+        kSpine.position.set(0, -0.92, 0.01);
+        const kEdge = new THREE.Mesh(new THREE.BoxGeometry(0.014, 1.5, 0.045), neonCyanMat);
+        kEdge.position.set(0, -0.92, -0.025);
+        // Шлейф за лезвием во время взмаха
+        const kBladeTrail = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.38, 1.45),
+            new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide, transparent: true, opacity: 0.45 })
+        );
+        kBladeTrail.rotation.y = Math.PI / 2;
+        kBladeTrail.position.set(0, -0.92, 0.18);
+        drawnKatanaGroup.add(kGrip, kTsuba, kSpine, kEdge, kBladeTrail);
+        drawnKatanaGroup.position.set(0, -0.35, -0.04);
+        drawnKatanaGroup.visible = false;
+        leftArm.userData.forearm.add(drawnKatanaGroup);
+
+        // Вспышка выстрела (Muzzle Flash)
+        const muzzleFlash = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.32, 1),
+            new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0 })
+        );
+        muzzleFlash.position.set(0, 0.03, -0.72);
+        gunGroup.add(muzzleFlash);
+
+        gunGroup.position.set(0.02, -0.34, -0.22);
+        gunGroup.rotation.x = -Math.PI / 2;
+        rightArm.userData.forearm.add(gunGroup);
+
+        // Динамическая дуга-полумесяц рассечения воздуха перед героем (не плоский диск)
+        const katanaSlashArc = new THREE.Group();
+        const outerWaveMat = new THREE.MeshBasicMaterial({
+            color: 0x00f0ff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false
+        });
+        const innerCoreMat = new THREE.MeshBasicMaterial({
+            color: 0xff2a85,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false
+        });
+        const outerCrescent = new THREE.Mesh(
+            new THREE.RingGeometry(1.15, 1.52, 28, 1, -Math.PI * 0.28, Math.PI * 0.56),
+            outerWaveMat
+        );
+        outerCrescent.rotation.x = -Math.PI / 2;
+        const innerCrescent = new THREE.Mesh(
+            new THREE.RingGeometry(0.95, 1.22, 24, 1, -Math.PI * 0.22, Math.PI * 0.44),
+            innerCoreMat
+        );
+        innerCrescent.rotation.x = -Math.PI / 2;
+        innerCrescent.position.y = 0.02;
+        katanaSlashArc.add(outerCrescent, innerCrescent);
+        katanaSlashArc.position.set(0, 1.32, -0.85);
+        katanaSlashArc.visible = false;
+        katanaSlashArc.userData = { outerMat: outerWaveMat, innerMat: innerCoreMat };
+        playerGroup.add(katanaSlashArc);
+
+        // Двухсуставные ноги (Бедро -> Колено с наколенником -> Голень -> Неоновый кроссовок)
+        function createCyberLeg(isLeft) {
+            const hipPivot = new THREE.Group();
+            hipPivot.position.set(isLeft ? -0.17 : 0.17, 0.98, 0);
+
+            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.105, 0.46, 14), pantsMat);
+            thigh.position.y = -0.23;
+            hipPivot.add(thigh);
+
+            // Кибер-наколенник со светодиодом
+            const kneePad = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), armorJointMat);
+            kneePad.position.set(0, -0.46, -0.03);
+            const kneeLed = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, 0.04), neonCyanMat);
+            kneeLed.position.set(0, -0.46, -0.13);
+            hipPivot.add(kneePad, kneeLed);
+
+            // Сустав голени (сгибается в колене при беге и прыжке)
+            const shinPivot = new THREE.Group();
+            shinPivot.position.y = -0.46;
+            hipPivot.add(shinPivot);
+
+            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.075, 0.44, 14), pantsMat);
+            shin.position.y = -0.22;
+            shinPivot.add(shin);
+
+            // Скульптурный футуристический кроссовок со светящейся подошвой и пяткой
+            const sneakerGroup = new THREE.Group();
+            sneakerGroup.position.set(0, -0.45, -0.05);
+            const shoeUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 0.36, 12), jacketMat);
+            shoeUpper.rotation.x = Math.PI / 2;
+            const soleGlow = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.065, 0.42), neonPinkMat);
+            soleGlow.position.y = -0.07;
+            const heelStrip = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.05), neonCyanMat);
+            heelStrip.position.set(0, 0.02, 0.19);
+            sneakerGroup.add(shoeUpper, soleGlow, heelStrip);
+            shinPivot.add(sneakerGroup);
+
+            hipPivot.userData.shin = shinPivot;
+            return hipPivot;
+        }
+        const leftLeg = createCyberLeg(true);
+        const rightLeg = createCyberLeg(false);
+        playerGroup.add(leftLeg, rightLeg);
+
+        const hero = {
+            lane: 1,
+            targetX: 0,
+            y: 0,
+            vy: 0,
+            jumping: false,
+            sliding: false,
+            slideTime: 0,
+            trailTimer: 0
+        };
+
+        // ==========================================
+        // 6. Построение Объёмного Мегаполиса, Мокрого Шоссе и Трафика
+        // ==========================================
+        const asphaltTex = createWetAsphaltTexture();
+        const winTexPink = createBuildingWindowsTexture('#ff2a85');
+        const winTexCyan = createBuildingWindowsTexture('#00f0ff');
+        const billboardTextures = [
+            createBillboardTexture('KIZUNA'),
+            createBillboardTexture('NEXUS'),
+            createBillboardTexture('ARASAKA'),
+            createBillboardTexture('KIROSHI')
+        ];
+
+        const roadMat = new THREE.MeshStandardMaterial({
+            map: asphaltTex,
+            roughness: 0.14,
+            metalness: 0.72
+        });
+        const barrierMat = new THREE.MeshStandardMaterial({ color: 0x23273a, roughness: 0.45, metalness: 0.6 });
+        const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x151824, roughness: 0.4, metalness: 0.8 });
+        const orangeLightMat = new THREE.MeshBasicMaterial({ color: 0xff9900 });
+        const redLightMat = new THREE.MeshBasicMaterial({ color: 0xff1e56 });
+
+        const SEG_LENGTH = 56;
+        const SEG_COUNT = 7;
+        const segments = [];
+        const flyingCars = [];
+
+        function createCitySegment(zPos, index) {
+            const group = new THREE.Group();
+            group.position.z = zPos;
+
+            // 1. Полотно мокрого 3-полосного шоссе + физические светящиеся направляющие полос
+            const road = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.4, SEG_LENGTH), roadMat);
+            road.position.y = -0.2;
+            group.add(road);
+
+            // Рельефные неоновые разделители полос (-1.7 и +1.7), гарантирующие идеальную читаемость 3 полос
+            [-1.7, 1.7].forEach(divX => {
+                const strip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, SEG_LENGTH), neonCyanMat);
+                strip.position.set(divX, 0.015, 0);
+                group.add(strip);
+            });
+
+            // 2. Объёмные наклонные отбойники Jersey Barrier + фонарные столбы освещения
+            [-6.35, 6.35].forEach(sideX => {
+                const dir = sideX > 0 ? 1 : -1;
+                const wallBase = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.7, SEG_LENGTH), barrierMat);
+                wallBase.position.set(sideX, 0.35, 0);
+                const wallTop = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, SEG_LENGTH), darkMetalMat);
+                wallTop.position.set(sideX, 1.0, 0);
+                group.add(wallBase, wallTop);
+
+                for (let lz = -SEG_LENGTH / 2 + 5; lz < SEG_LENGTH / 2; lz += 10) {
+                    const hazardLight = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.16, 0.22, 2.2),
+                        lz % 20 === 0 ? orangeLightMat : redLightMat
+                    );
+                    hazardLight.position.set(sideX - dir * 0.42, 0.48, lz);
+                    group.add(hazardLight);
+                }
+
+                // Арочные кибер-фонари вдоль трассы
+                for (let pz = -SEG_LENGTH / 2 + 12; pz < SEG_LENGTH / 2; pz += 28) {
+                    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 8.5, 8), darkMetalMat);
+                    pole.position.set(sideX + dir * 0.6, 4.25, pz);
+                    const arm = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.18, 0.22), darkMetalMat);
+                    arm.position.set(sideX - dir * 0.5, 8.4, pz);
+                    const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 0.35), dir > 0 ? neonCyanMat : neonPinkMat);
+                    lamp.position.set(sideX - dir * 0.9, 8.28, pz);
+                    group.add(pole, arm, lamp);
+                }
+            });
+
+            // 3. Многоярусные объёмные небоскрёбы с карнизами, трубами, вентблоками и голограммами
+            [-1, 1].forEach((dir, sIdx) => {
+                for (let b = 0; b < 2; b++) {
+                    const bWidth = 14 + (index % 2) * 4;
+                    const bHeight = 46 + ((index + b) % 3) * 18;
+                    const bDepth = 22;
+                    const isPink = (b + sIdx) % 2 === 0;
+                    const bMat = new THREE.MeshStandardMaterial({
+                        map: isPink ? winTexPink : winTexCyan,
+                        roughness: 0.35,
+                        metalness: 0.45
+                    });
+
+                    const bGroup = new THREE.Group();
+                    const bx = dir * (14.8 + bWidth / 2);
+                    const bz = -SEG_LENGTH / 4 + b * (SEG_LENGTH / 2);
+                    bGroup.position.set(bx, 0, bz);
+
+                    // Основной корпус + выступающий средний ярус + верхняя башня
+                    const mainTower = new THREE.Mesh(new THREE.BoxGeometry(bWidth, bHeight, bDepth), bMat);
+                    mainTower.position.y = bHeight / 2 - 2;
+                    bGroup.add(mainTower);
+
+                    const podium = new THREE.Mesh(new THREE.BoxGeometry(bWidth + 2.6, 14, bDepth + 1.5), darkMetalMat);
+                    podium.position.y = 5;
+                    bGroup.add(podium);
+
+                    // Светящиеся архитектурные карнизы по этажам и вертикальные неоновые рёбра
+                    const accentMat = isPink ? neonPinkMat : neonCyanMat;
+                    [12, 24, 36].forEach(ledgeY => {
+                        if (ledgeY < bHeight - 4) {
+                            const ledge = new THREE.Mesh(new THREE.BoxGeometry(bWidth + 1.2, 0.45, bDepth + 0.8), accentMat);
+                            ledge.position.y = ledgeY;
+                            bGroup.add(ledge);
+                        }
+                    });
+
+                    const vFin = new THREE.Mesh(new THREE.BoxGeometry(0.45, bHeight, 0.65), accentMat);
+                    vFin.position.set(-dir * (bWidth / 2 + 0.2), bHeight / 2, bDepth / 3);
+                    bGroup.add(vFin);
+
+                    // Промышленные трубы и вентиляционные блоки на нижнем уровне фасада
+                    for (let p = -1; p <= 1; p += 2) {
+                        const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 16, 8), barrierMat);
+                        pipe.position.set(-dir * (bWidth / 2 + 1.35), 7, p * 5);
+                        const hvacBox = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.2, 3.2), barrierMat);
+                        hvacBox.position.set(-dir * (bWidth / 2 + 1.4), 5.5 + p * 2, p * 2.2);
+                        bGroup.add(pipe, hvacBox);
+                    }
+
+                    // Антенны и сигнальные маяки на крыше
+                    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.35, 12, 8), darkMetalMat);
+                    spire.position.set(0, bHeight + 4, 0);
+                    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 8), redLightMat);
+                    beacon.position.set(0, bHeight + 10, 0);
+                    bGroup.add(spire, beacon);
+
+                    group.add(bGroup);
+
+                    // Вынесенный вперёд голографический билборд на стальных фермах с неоновой рамкой
+                    const tex = billboardTextures[(index + b + (dir > 0 ? 1 : 0)) % billboardTextures.length];
+                    const holoGroup = new THREE.Group();
+                    holoGroup.position.set(dir * 8.4, 11.5 + (b % 2) * 4.5, bz);
+                    holoGroup.rotation.y = dir > 0 ? -Math.PI / 2.35 : Math.PI / 2.35;
+
+                    const frameMesh = new THREE.Mesh(new THREE.BoxGeometry(12.6, 14.6, 0.35), darkMetalMat);
+                    frameMesh.position.z = -0.22;
+                    const borderGlow = new THREE.Mesh(new THREE.BoxGeometry(13.0, 15.0, 0.15), accentMat);
+                    borderGlow.position.z = -0.32;
+                    const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(12.2, 14.2), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
+                    holoGroup.add(frameMesh, borderGlow, screenMesh);
+                    group.add(holoGroup);
+                }
+            });
+
+            // 4. Надземный мост-эстакада с мощными боковыми опорами
+            if (index % 2 === 0) {
+                const overpass = new THREE.Mesh(new THREE.BoxGeometry(34, 1.9, 5.2), darkMetalMat);
+                overpass.position.set(0, 15.2, 0);
+                const neonTrim = new THREE.Mesh(new THREE.BoxGeometry(34, 0.28, 5.4), neonCyanMat);
+                neonTrim.position.set(0, 14.2, 0);
+                [-9.5, 9.5].forEach(px => {
+                    const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.8, 16, 3.2), barrierMat);
+                    pillar.position.set(px, 7.5, 0);
+                    group.add(pillar);
+                });
+                group.add(overpass, neonTrim);
+            }
+
+            scene.add(group);
+            return group;
+        }
+
+        for (let i = 0; i < SEG_COUNT; i++) {
+            segments.push(createCitySegment(-i * SEG_LENGTH, i));
+        }
+
+        // Горизонт с силуэтами башен мегаполиса вдалеке
+        const skylineGroup = new THREE.Group();
+        scene.add(skylineGroup);
+        for (let i = -5; i <= 5; i++) {
+            const h = 80 + Math.abs(i % 3) * 38;
+            const tower = new THREE.Mesh(
+                new THREE.BoxGeometry(18, h, 18),
+                new THREE.MeshBasicMaterial({ map: i % 2 === 0 ? winTexCyan : winTexPink })
+            );
+            tower.position.set(i * 22, h / 2 - 10, -295);
+            skylineGroup.add(tower);
+        }
+
+        // Двусторонний воздушный трафик (летающие кибер-спиннеры с фарами и стоп-сигналами)
+        for (let i = 0; i < 10; i++) {
+            const spinner = new THREE.Group();
+            const oncoming = i % 2 === 0;
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.1, 4.4, 8), darkMetalMat);
+            body.rotation.x = Math.PI / 2;
+            const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8), neonCyanMat);
+            canopy.scale.set(0.9, 0.5, 1.6);
+            canopy.position.y = 0.38;
+
+            const frontLights = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.22, 0.2), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            frontLights.position.z = oncoming ? 2.2 : -2.2;
+            const tailLights = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.26, 0.2), redLightMat);
+            tailLights.position.z = oncoming ? -2.2 : 2.2;
+
+            spinner.add(body, canopy, frontLights, tailLights);
+            spinner.position.set(
+                (oncoming ? -1 : 1) * (5 + (i % 3) * 6.5),
+                12 + (i % 4) * 4.5,
+                -Math.random() * 260
+            );
+            scene.add(spinner);
+            flyingCars.push({ mesh: spinner, speed: oncoming ? (28 + Math.random() * 20) : -(12 + Math.random() * 14) });
+        }
+
+        // ==========================================
+        // 7. Детализированные 3D-Препятствия, Дроны, Грузовики и Киберсолдаты
+        // ==========================================
+        const obstacles = [];
+        const enemies = [];
+        const coins = [];
+        const bullets = [];
+        const particles = [];
+
+        // 1) Футуристическая плазменная баррикада (Прыжок)
+        function createHoloBarrierMesh() {
+            const g = new THREE.Group();
+            // Боковые наклонные генераторы поля
+            [-1.22, 1.22].forEach(px => {
+                const emitter = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 1.32, 8), darkMetalMat);
+                emitter.position.set(px, 0.66, 0);
+                const emitterCap = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), neonPinkMat);
+                emitterCap.position.set(px, 1.32, 0);
+                g.add(emitter, emitterCap);
+            });
+
+            const basePlate = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.22, 0.58), barrierMat);
+            basePlate.position.y = 0.11;
+            g.add(basePlate);
+
+            // Полупрозрачный плазменный щит с силовыми полосами
+            const shield = new THREE.Mesh(
+                new THREE.BoxGeometry(2.35, 1.02, 0.1),
+                new THREE.MeshBasicMaterial({ color: 0xff1e42, transparent: true, opacity: 0.72 })
+            );
+            shield.position.y = 0.72;
+            const topBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.45, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+            topBeam.rotation.z = Math.PI / 2;
+            topBeam.position.y = 1.24;
+
+            // Голограмма предупреждения ⚠️
+            const tri = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.52, 3), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            tri.rotation.x = Math.PI / 2;
+            tri.position.set(0, 0.74, 0.08);
+            g.add(shield, topBeam, tri);
+            return g;
+        }
+
+        // 2) Детализированный бронированный Кибер-Грузовик с кабиной, колёсами и фарами (Смена полосы)
+        function createCyberTruckMesh() {
+            const g = new THREE.Group();
+            // Грузовой контейнер с рёбрами жёсткости и неоновыми полосами
+            const cargo = new THREE.Mesh(new THREE.BoxGeometry(2.55, 2.35, 4.4), barrierMat);
+            cargo.position.set(0, 1.55, -0.7);
+            const neonStripe = new THREE.Mesh(new THREE.BoxGeometry(2.62, 0.18, 4.2), neonCyanMat);
+            neonStripe.position.set(0, 1.65, -0.7);
+            g.add(cargo, neonStripe);
+
+            // Выступающая бронированная кабина с наклонным лобовым визором
+            const cab = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.85, 1.9), darkMetalMat);
+            cab.position.set(0, 1.25, 2.2);
+            const visor = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.55, 0.15), neonCyanMat);
+            visor.position.set(0, 1.68, 3.15);
+            visor.rotation.x = -0.2;
+            const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.45, 0.35), armorJointMat);
+            bumper.position.set(0, 0.48, 3.2);
+            g.add(cab, visor, bumper);
+
+            // Яркие сдвоенные фары
+            [-0.85, 0.85].forEach(lx => {
+                const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.22, 0.12), new THREE.MeshBasicMaterial({ color: 0xffee99 }));
+                headlight.position.set(lx, 0.88, 3.18);
+                g.add(headlight);
+            });
+
+            // 6 массивных колёс с неоновыми дисками
+            const wheelGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.36, 14);
+            wheelGeo.rotateZ(Math.PI / 2);
+            const rimGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.38, 10);
+            rimGeo.rotateZ(Math.PI / 2);
+            [-1.25, 1.25].forEach(wx => {
+                [-2.1, 0.0, 2.1].forEach(wz => {
+                    const wheel = new THREE.Mesh(wheelGeo, pantsMat);
+                    wheel.position.set(wx, 0.48, wz);
+                    const rim = new THREE.Mesh(rimGeo, neonPinkMat);
+                    rim.position.set(wx, 0.48, wz);
+                    g.add(wheel, rim);
+                });
+            });
+            return g;
+        }
+
+        // 3) Бронированная турельная баррикада с генератором (Смена полосы)
+        function createCargoCrateMesh() {
+            const g = new THREE.Group();
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.35, 1.45, 8), darkMetalMat);
+            base.position.y = 0.72;
+            const coreRing = new THREE.Mesh(new THREE.CylinderGeometry(1.22, 1.22, 0.28, 8), neonPinkMat);
+            coreRing.position.y = 0.85;
+            const topDome = new THREE.Mesh(new THREE.SphereGeometry(0.85, 12, 10), barrierMat);
+            topDome.position.y = 1.45;
+            const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.4, 10), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+            eye.rotation.x = Math.PI / 2;
+            eye.position.set(0, 1.55, 0.75);
+            g.add(base, coreRing, topDome, eye);
+            return g;
+        }
+
+        // 4) Спаренные охранные квадро-дроны, удерживающие высокий лазерный барьер (Подкат)
+        function createSlideGateMesh() {
+            const g = new THREE.Group();
+            [-1.28, 1.28].forEach(dx => {
+                const droneBody = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), darkMetalMat);
+                droneBody.scale.set(1.2, 0.7, 1.2);
+                droneBody.position.set(dx, 2.25, 0);
+                const droneEye = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), redLightMat);
+                droneEye.position.set(dx, 2.22, 0.35);
+                const rotorRing = new THREE.Mesh(new THREE.TorusGeometry(0.48, 0.05, 8, 16), neonCyanMat);
+                rotorRing.rotation.x = Math.PI / 2;
+                rotorRing.position.set(dx, 2.35, 0);
+                g.add(droneBody, droneEye, rotorRing);
+            });
+
+            // Высокие горизонтальные лазерные лучи между дронами (низ на высоте 1.7м — нужно скользить)
+            [1.85, 2.15, 2.45].forEach(ly => {
+                const beam = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.055, 0.055, 2.5, 8),
+                    new THREE.MeshBasicMaterial({ color: 0xff1e56 })
+                );
+                beam.rotation.z = Math.PI / 2;
+                beam.position.y = ly;
+                g.add(beam);
+            });
+
+            const holoCurtain = new THREE.Mesh(
+                new THREE.PlaneGeometry(2.45, 0.85),
+                new THREE.MeshBasicMaterial({ color: 0xff2a6d, transparent: true, opacity: 0.42, side: THREE.DoubleSide })
+            );
+            holoCurtain.position.y = 2.15;
+            g.add(holoCurtain);
+            return g;
+        }
+
+        // 5) Вооружённый Киберсолдат с шарнирным корпусом, винтовкой, прицельным лазером и полоской HP
+        function createMechEnemyMesh() {
+            const g = new THREE.Group();
+            const armorMat = new THREE.MeshStandardMaterial({ color: 0x1e2236, roughness: 0.3, metalness: 0.82 });
+            const redGlowMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+
+            // Ноги и наколенники
+            [-0.24, 0.24].forEach(lx => {
+                const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.11, 0.52, 10), armorMat);
+                thigh.position.set(lx, 0.72, 0);
+                const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.48, 10), darkMetalMat);
+                shin.position.set(lx, 0.26, 0);
+                const knee = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), redGlowMat);
+                knee.position.set(lx, 0.5, 0.08);
+                g.add(thigh, shin, knee);
+            });
+
+            // Бронированный торс с реактором и наплечниками
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.28, 0.82, 12), armorMat);
+            torso.position.y = 1.38;
+            const reactor = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.12, 10), redGlowMat);
+            reactor.rotation.x = Math.PI / 2;
+            reactor.position.set(0, 1.45, 0.34);
+            g.add(torso, reactor);
+
+            [-0.48, 0.48].forEach(sx => {
+                const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 10), armorMat);
+                shoulder.position.set(sx, 1.68, 0);
+                const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.55, 10), darkMetalMat);
+                arm.rotation.x = 0.7;
+                arm.position.set(sx * 0.85, 1.38, 0.28);
+                g.add(shoulder, arm);
+            });
+
+            // Шлем киберсолдата с горящим красным оптическим визором
+            const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 12), armorMat);
+            helmet.scale.set(0.95, 1.1, 1.05);
+            helmet.position.y = 2.02;
+            const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.26), redGlowMat);
+            visor.position.set(0, 2.02, 0.16);
+            g.add(helmet, visor);
+
+            // Лазерная винтовка в руках + красный луч целеуказателя в сторону игрока
+            const rifle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.95), darkMetalMat);
+            rifle.position.set(0.22, 1.32, 0.55);
+            const laserSight = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.02, 13, 6),
+                new THREE.MeshBasicMaterial({ color: 0xff1e42, transparent: true, opacity: 0.65 })
+            );
+            laserSight.rotation.x = Math.PI / 2;
+            laserSight.position.set(0.22, 1.34, 7.2);
+            g.add(rifle, laserSight);
+
+            // Наземная голографическая дорожка опасности + индикатор HP над головой
+            const warnZone = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.9, 13.5),
+                new THREE.MeshBasicMaterial({ color: 0xff1e42, transparent: true, opacity: 0.18, side: THREE.DoubleSide })
+            );
+            warnZone.rotation.x = -Math.PI / 2;
+            warnZone.position.set(0, 0.03, 7.2);
+
+            const hpBg = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.14), new THREE.MeshBasicMaterial({ color: 0x0b0e1a, side: THREE.DoubleSide }));
+            hpBg.position.set(0, 2.52, 0);
+            const hpBar = new THREE.Mesh(new THREE.PlaneGeometry(1.04, 0.09), new THREE.MeshBasicMaterial({ color: 0xff2a6d, side: THREE.DoubleSide }));
+            hpBar.position.set(0, 2.52, 0.02);
+            g.userData.hpBar = hpBar;
+
+            g.add(warnZone, hpBg, hpBar);
+            return g;
+        }
+
+        // Фабрика объёмного золотого шестиугольного кредита (как на скриншоте)
+        const hexCoinGeo = new THREE.CylinderGeometry(0.58, 0.58, 0.16, 6);
+        hexCoinGeo.rotateZ(Math.PI / 2);
+        const hexCoinMat = new THREE.MeshStandardMaterial({
+            color: 0xffb703,
+            emissive: 0xff8800,
+            emissiveIntensity: 0.65,
+            roughness: 0.2,
+            metalness: 0.9
+        });
+        const hexInnerGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.2, 6);
+        hexInnerGeo.rotateZ(Math.PI / 2);
+        const hexInnerMat = new THREE.MeshBasicMaterial({ color: 0xfff3b0 });
+
+        function createCoinMesh() {
+            const g = new THREE.Group();
+            const outer = new THREE.Mesh(hexCoinGeo, hexCoinMat);
+            const inner = new THREE.Mesh(hexInnerGeo, hexInnerMat);
+            g.add(outer, inner);
+            return g;
+        }
+
+        // Фабрика капсул восстановления здоровья (Medkit) и батарей энергии (Nano-Battery)
+        function createPowerupMesh(kind) {
+            const g = new THREE.Group();
+            const mat = kind === 'HP' ? neonPinkMat : neonCyanMat;
+            const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.48, 0), mat);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.06, 8, 18), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            g.add(core, ring);
+            return g;
+        }
+
+        // Неоновые линии скорости / кибер-дождь в воздухе для ощущения высокой скорости
+        const speedLinesGroup = new THREE.Group();
+        scene.add(speedLinesGroup);
+        const speedDrops = [];
+        const dropGeo = new THREE.BoxGeometry(0.035, 0.035, 3.8);
+        for (let i = 0; i < 45; i++) {
+            const drop = new THREE.Mesh(dropGeo, i % 3 === 0 ? neonPinkMat : neonCyanMat);
+            drop.position.set(
+                (Math.random() - 0.5) * 22,
+                1 + Math.random() * 14,
+                -Math.random() * 120
+            );
+            speedLinesGroup.add(drop);
+            speedDrops.push(drop);
+        }
+
+        // Спавн волн препятствий, кредитов и врагов на полосах
+        const LANES = [-3.4, 0, 3.4];
+
+        function spawnEncounterWave(zPos) {
+            const freeLane = Math.floor(Math.random() * 3);
+            const hazardType = Math.random();
+
+            for (let l = 0; l < 3; l++) {
+                const lx = LANES[l];
+                if (l === freeLane) {
+                    const roll = Math.random();
+                    if (roll > 0.35) {
+                        // Цепочка из 3 золотых кредитов вдоль свободной полосы
+                        for (let c = 0; c < 3; c++) {
+                            const coin = createCoinMesh();
+                            coin.position.set(lx, 0.85, zPos - c * 3.2);
+                            scene.add(coin);
+                            coins.push({ mesh: coin, z: zPos - c * 3.2, kind: 'COIN', taken: false });
+                        }
+                    } else if (roll > 0.18) {
+                        const kind = Math.random() > 0.5 ? 'HP' : 'ENERGY';
+                        const pMesh = createPowerupMesh(kind);
+                        pMesh.position.set(lx, 1.0, zPos);
+                        scene.add(pMesh);
+                        coins.push({ mesh: pMesh, z: zPos, kind, taken: false });
+                    }
+                } else {
+                    if (hazardType < 0.30) {
+                        const obs = createHoloBarrierMesh();
+                        obs.position.set(lx, 0, zPos);
+                        scene.add(obs);
+                        obstacles.push({ mesh: obs, lane: l, z: zPos, type: 'JUMP', hit: false });
+                    } else if (hazardType < 0.58) {
+                        const truck = Math.random() > 0.42 ? createCyberTruckMesh() : createCargoCrateMesh();
+                        truck.position.set(lx, 0, zPos);
+                        scene.add(truck);
+                        obstacles.push({ mesh: truck, lane: l, z: zPos, type: 'AVOID', hit: false });
+                    } else if (hazardType < 0.80) {
+                        const gate = createSlideGateMesh();
+                        gate.position.set(lx, 0, zPos);
+                        scene.add(gate);
+                        obstacles.push({ mesh: gate, lane: l, z: zPos, type: 'SLIDE', hit: false });
+                    } else {
+                        const mech = createMechEnemyMesh();
+                        mech.position.set(lx, 0, zPos);
+                        scene.add(mech);
+                        enemies.push({ mesh: mech, lane: l, z: zPos, hp: 60, attackCooldown: 1.5 });
+                    }
+                }
+            }
+        }
+
+        for (let z = -36; z > -280; z -= 34) {
+            spawnEncounterWave(z);
+        }
+
+        // ==========================================
+        // 8. Спавн искр и система прицеливания (Auto-Aim)
+        // ==========================================
+        function spawnSparks(pos, colorHex, count = 12) {
+            const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+            for (let i = 0; i < count; i++) {
+                const s = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), mat);
+                s.position.copy(pos);
+                scene.add(s);
+                particles.push({
+                    mesh: s,
+                    vel: new THREE.Vector3((Math.random() - 0.5) * 11, Math.random() * 9 + 2, (Math.random() - 0.5) * 11),
+                    life: 0.35 + Math.random() * 0.25
+                });
+            }
+        }
+
+        let lockedEnemy = null;
+        function updateTargetLock() {
+            let closest = null;
+            let minDist = 45;
+            for (const e of enemies) {
+                const dist = playerGroup.position.distanceTo(e.mesh.position);
+                if (dist < minDist && e.z < playerGroup.position.z && e.z > playerGroup.position.z - 40) {
+                    minDist = dist;
+                    closest = e;
+                }
+            }
+            lockedEnemy = closest;
+
+            const reticle = document.getElementById('target-reticle');
+            if (lockedEnemy && state.mode === 'PLAY') {
+                const worldPos = lockedEnemy.mesh.position.clone().add(new THREE.Vector3(0, 1.6, 0));
+                worldPos.project(camera);
+                if (worldPos.z < 1) {
+                    const x = (worldPos.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-worldPos.y * 0.5 + 0.5) * window.innerHeight;
+                    reticle.style.left = `${x}px`;
+                    reticle.style.top = `${y}px`;
+                    reticle.style.display = 'block';
+                    return;
+                }
+            }
+            reticle.style.display = 'none';
+        }
+
+        function fireWeapon() {
+            audio.shoot();
+            muzzleFlash.material.opacity = 1;
+            muzzleFlash.rotation.z = Math.random() * Math.PI;
+
+            const startPos = playerGroup.position.clone().add(new THREE.Vector3(0.55, 1.35, -0.9));
+            const pellets = state.weaponMode === 1 ? 3 : 1;
+
+            for (let p = 0; p < pellets; p++) {
+                const tracer = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.12, 0.12, 2.4),
+                    new THREE.MeshBasicMaterial({ color: state.weaponMode === 1 ? 0xff2a85 : 0xffcc00 })
+                );
+                tracer.position.copy(startPos);
+                scene.add(tracer);
+
+                let dir = new THREE.Vector3((p - Math.floor(pellets / 2)) * 0.06, 0, -1).normalize();
+                if (lockedEnemy) {
+                    const targetCenter = lockedEnemy.mesh.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+                    dir = targetCenter.sub(startPos).normalize();
+                }
+                bullets.push({ mesh: tracer, dir, speed: 145, dmg: state.weaponMode === 1 ? 22 : 30, life: 0.9 });
+            }
+        }
+
+        function performKatanaAttack() {
+            if (state.katanaTimer > 0) return;
+            audio.katana();
+            state.katanaDuration = state.combo >= 5 ? 0.24 : 0.30;
+            state.katanaTimer = state.katanaDuration;
+            state.slashComboStep = (state.slashComboStep + 1) % 2;
+
+            katanaSlashArc.visible = true;
+            // Наклон плоскости удара по диагонали (чередуем угол рассечения слева-направо и справа-налево)
+            const tiltZ = state.slashComboStep === 0 ? -0.48 : 0.48;
+            katanaSlashArc.rotation.set(0.22, 0, tiltZ);
+            katanaSlashArc.userData.outerMat.opacity = 0.92;
+            katanaSlashArc.userData.innerMat.opacity = 0.78;
+
+            drawnKatanaGroup.visible = true;
+            katanaHiltInSheath.visible = false;
+            spawnSparks(playerGroup.position.clone().add(new THREE.Vector3(0, 1.35, -1.6)), 0x00f0ff, 10);
+
+            const pz = playerGroup.position.z;
+            const px = playerGroup.position.x;
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                const dz = pz - e.z;
+                const dx = Math.abs(px - e.mesh.position.x);
+                if (dz > -1.5 && dz < 9.5 && dx < 3.0) {
+                    e.hp = 0;
+                    registerEnemyKill(e.mesh.position, true);
+                    scene.remove(e.mesh);
+                    enemies.splice(i, 1);
+                }
+            }
+        }
+
+        function registerEnemyKill(pos, isMelee = false) {
+            state.kills++;
+            state.combo++;
+            state.comboTimer = 4.5;
+            const mult = state.combo >= 5 ? 3 : (state.combo >= 2 ? 2 : 1);
+            const reward = (isMelee ? 6 : 3) * mult;
+            state.coins += reward;
+            state.energy = Math.min(state.maxEnergy, state.energy + (isMelee ? 14 : 8));
+            spawnSparks(pos.clone().add(new THREE.Vector3(0, 1.5, 0)), 0xff1e78, 26);
+            spawnFloatingText(pos.clone().add(new THREE.Vector3(0, 2.3, 0)), `+${reward}₢ ${mult > 1 ? 'x' + mult : ''}`, '#ff2a6d');
+        }
+
+        function performCyberDash() {
+            if (state.mode !== 'PLAY' || state.dashTimer > 0 || state.energy < 25) return;
+            state.energy -= 25;
+            state.dashTimer = 0.38;
+            state.shake = 0.22;
+            audio.dash();
+            spawnSparks(playerGroup.position.clone().add(new THREE.Vector3(0, 1.1, 0)), 0x00f0ff, 20);
+        }
+
+        function takeDamage(amount) {
+            if (state.dashTimer > 0) return; // Неуязвимость во время Кибер-Рывка
+            state.hp = Math.max(0, state.hp - amount);
+            state.combo = 0;
+            state.comboTimer = 0;
+            state.shake = 0.35;
+            audio.hit();
+            const dmgFx = document.getElementById('damage-fx');
+            dmgFx.style.opacity = '1';
+            setTimeout(() => { dmgFx.style.opacity = '0'; }, 180);
+
+            if (state.hp <= 0) {
+                openModal('GAME OVER', 'Связь с кибер-декой прервана', false);
+            }
+        }
+
+        // ==========================================
+        // 9. Управление: Клавиатура, Свайпы, Джойстик и Кнопки
+        // ==========================================
+        function switchLane(delta) {
+            if (state.mode !== 'PLAY') return;
+            const next = Math.max(0, Math.min(2, hero.lane + delta));
+            hero.lane = next;
+            hero.targetX = LANES[next];
+        }
+
+        function doJump() {
+            if (state.mode !== 'PLAY' || hero.jumping) return;
+            hero.jumping = true;
+            hero.sliding = false;
+            hero.vy = 17.5;
+            audio.jump();
+        }
+
+        function doSlide() {
+            if (state.mode !== 'PLAY') return;
+            hero.sliding = true;
+            hero.slideTime = 0.65;
+            if (hero.jumping) hero.vy = -24;
+            audio.slide();
+        }
+
+        function toggleSandy() {
+            if (state.mode !== 'PLAY') return;
+            if (!state.sandyActive && state.energy >= 20) {
+                state.sandyActive = true;
+                audio.sandy();
+                document.getElementById('sandy-fx').style.opacity = '1';
+            } else {
+                state.sandyActive = false;
+                document.getElementById('sandy-fx').style.opacity = '0';
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Escape') {
+                e.preventDefault();
+                if (state.mode === 'PLAY') {
+                    openModal('ПАУЗА', 'Нейролинк в режиме ожидания', true);
+                } else if (state.mode === 'PAUSE') {
+                    resumeGame();
+                }
+                return;
+            }
+
+            if (state.mode !== 'PLAY') return;
+            switch (e.code) {
+                case 'ArrowLeft':
+                case 'KeyA': switchLane(-1); break;
+                case 'ArrowRight':
+                case 'KeyD': switchLane(1); break;
+                case 'ArrowUp':
+                case 'KeyW': doJump(); break;
+                case 'ArrowDown':
+                case 'KeyS': doSlide(); break;
+                case 'Space': state.firing = true; break;
+                case 'KeyE': performKatanaAttack(); break;
+                case 'KeyQ': toggleSandy(); break;
+                case 'ShiftLeft':
+                case 'ShiftRight': performCyberDash(); break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') state.firing = false;
+        });
+
+        // ==========================================
+        // 10. HUD, Модальные окна и Сенсорные кнопки
+        // ==========================================
+        function syncHUD() {
+            const hpPct = Math.max(0, Math.min(100, (state.hp / state.maxHp) * 100));
+            const enPct = Math.max(0, Math.min(100, (state.energy / state.maxEnergy) * 100));
+            document.getElementById('hp-fill').style.width = `${hpPct}%`;
+            document.getElementById('hp-text').textContent = `${Math.ceil(state.hp)} / ${state.maxHp}`;
+            document.getElementById('energy-fill').style.width = `${enPct}%`;
+            document.getElementById('energy-text').textContent = `${Math.floor(state.energy)} / ${state.maxEnergy}`;
+
+            const distInt = Math.floor(state.distance);
+            document.getElementById('hud-distance').textContent = `${distInt.toLocaleString('en-US')} m`;
+            if (distInt > state.bestDistance) {
+                state.bestDistance = distInt;
+                localStorage.setItem('cyber_runner_best3d', String(state.bestDistance));
+            }
+            document.getElementById('hud-best').textContent = `${state.bestDistance.toLocaleString('en-US')} m`;
+            document.getElementById('hud-coins').textContent = String(state.coins);
+            document.getElementById('hud-kills').textContent = String(state.kills);
+
+            const comboBox = document.getElementById('hud-combo-box');
+            const comboText = document.getElementById('hud-combo');
+            const overdriveEl = document.getElementById('hud-overdrive');
+            if (state.combo >= 2) {
+                comboBox.classList.remove('hidden');
+                comboText.textContent = `x${state.combo}`;
+                if (state.combo >= 5) overdriveEl.classList.remove('hidden');
+                else overdriveEl.classList.add('hidden');
+            } else {
+                comboBox.classList.add('hidden');
+            }
+        }
+
+        function openModal(title, subtitle, canResume = true) {
+            state.mode = canResume ? 'PAUSE' : 'GAMEOVER';
+            state.firing = false;
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-subtitle').textContent = subtitle;
+            document.getElementById('stat-dist').textContent = `${Math.floor(state.distance)} m`;
+            document.getElementById('stat-coins').textContent = String(state.coins);
+            document.getElementById('stat-kills').textContent = String(state.kills);
+            document.getElementById('btn-resume').style.display = canResume ? 'block' : 'none';
+            document.getElementById('modal-overlay').classList.remove('hidden');
+        }
+
+        function resumeGame() {
+            if (state.hp <= 0) return;
+            state.mode = 'PLAY';
+            document.getElementById('modal-overlay').classList.add('hidden');
+        }
+
+        function resetGame() {
+            state.hp = state.maxHp;
+            state.energy = state.maxEnergy;
+            state.distance = 0;
+            state.speed = 36;
+            state.sandyActive = false;
+            state.firing = false;
+            state.katanaTimer = 0;
+            state.dashTimer = 0;
+            state.combo = 0;
+            state.comboTimer = 0;
+            document.getElementById('sandy-fx').style.opacity = '0';
+            document.getElementById('damage-fx').style.opacity = '0';
+
+            hero.lane = 1;
+            hero.targetX = 0;
+            hero.y = 0;
+            hero.vy = 0;
+            hero.jumping = false;
+            hero.sliding = false;
+            playerGroup.position.set(0, 0, 0);
+
+            obstacles.forEach(o => scene.remove(o.mesh));
+            obstacles.length = 0;
+            enemies.forEach(e => scene.remove(e.mesh));
+            enemies.length = 0;
+            coins.forEach(c => scene.remove(c.mesh));
+            coins.length = 0;
+            bullets.forEach(b => scene.remove(b.mesh));
+            bullets.length = 0;
+
+            segments.forEach((seg, i) => {
+                seg.position.z = -i * SEG_LENGTH;
+            });
+            for (let z = -36; z > -280; z -= 34) {
+                spawnEncounterWave(z);
+            }
+
+            state.mode = 'PLAY';
+            document.getElementById('modal-overlay').classList.add('hidden');
+            syncHUD();
+        }
+
+        // Привязка кнопок интерфейса и сенсорного управления
+        document.getElementById('btn-pause').addEventListener('click', () => {
+            audio.init();
+            if (state.mode === 'PLAY') openModal('ПАУЗА', 'Нейролинк в режиме ожидания', true);
+            else if (state.mode === 'PAUSE') resumeGame();
+        });
+        document.getElementById('btn-resume').addEventListener('click', () => {
+            audio.init();
+            resumeGame();
+        });
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            audio.init();
+            resetGame();
+        });
+        document.getElementById('btn-sound').addEventListener('click', () => {
+            audio.init();
+            audio.enabled = !audio.enabled;
+            document.getElementById('sound-label').textContent = audio.enabled ? '🔊' : '🔇';
+        });
+
+        const btnFire = document.getElementById('btn-fire');
+        btnFire.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            audio.init();
+            state.firing = true;
+            fireWeapon();
+            state.lastShot = performance.now();
+        });
+        window.addEventListener('pointerup', () => { state.firing = false; });
+
+        document.getElementById('btn-katana').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            audio.init();
+            performKatanaAttack();
+        });
+        document.getElementById('btn-sandy').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            audio.init();
+            toggleSandy();
+        });
+        document.getElementById('btn-dash').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            audio.init();
+            performCyberDash();
+        });
+        document.getElementById('btn-swap').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            audio.init();
+            state.weaponMode = (state.weaponMode + 1) % 2;
+            spawnFloatingText(
+                playerGroup.position.clone().add(new THREE.Vector3(0, 2.2, 0)),
+                state.weaponMode === 1 ? 'SHOTGUN MODE' : 'PULSE RIFLE',
+                '#00f0ff'
+            );
+        });
+        document.getElementById('btn-aim').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            audio.init();
+            updateTargetLock();
+            fireWeapon();
+        });
+
+        // Свайпы по экрану и виртуальный джойстик
+        let touchStartX = 0, touchStartY = 0, touchActive = false;
+        const joyZone = document.getElementById('joystick-zone');
+        const joyKnob = document.getElementById('joystick-knob');
+
+        joyZone.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            audio.init();
+            touchActive = true;
+            touchStartX = e.clientX;
+            touchStartY = e.clientY;
+        });
+
+        window.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('button') || e.target.closest('#joystick-zone') || e.target.closest('#modal-overlay')) return;
+            audio.init();
+            touchActive = true;
+            touchStartX = e.clientX;
+            touchStartY = e.clientY;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!touchActive) return;
+            const dx = e.clientX - touchStartX;
+            const dy = e.clientY - touchStartY;
+            const clampX = Math.max(-24, Math.min(24, dx * 0.45));
+            const clampY = Math.max(-24, Math.min(24, dy * 0.45));
+            joyKnob.style.transform = `translate(${clampX}px, ${clampY}px)`;
+
+            if (Math.abs(dx) > 34 || Math.abs(dy) > 34) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    switchLane(dx > 0 ? 1 : -1);
+                } else {
+                    if (dy < 0) doJump();
+                    else doSlide();
+                }
+                touchActive = false;
+                setTimeout(() => { joyKnob.style.transform = 'translate(0px, 0px)'; }, 90);
+            }
+        });
+
+        window.addEventListener('pointerup', () => {
+            touchActive = false;
+            joyKnob.style.transform = 'translate(0px, 0px)';
+        });
+
+        // ==========================================
+        // 11. Главный Игровой Цикл (60 FPS)
+        // ==========================================
+        let prevTime = performance.now();
+
+        function gameLoop(now) {
+            requestAnimationFrame(gameLoop);
+
+            const rawDt = Math.min(0.05, (now - prevTime) / 1000);
+            prevTime = now;
+
+            if (state.mode === 'PLAY') {
+                const worldDt = state.sandyActive ? rawDt * 0.3 : rawDt;
+
+                // Обработка Кибер-Рывка (Cyber Dash) и таймера Комбо
+                if (state.dashTimer > 0) {
+                    state.dashTimer = Math.max(0, state.dashTimer - rawDt);
+                }
+                if (state.comboTimer > 0) {
+                    state.comboTimer -= rawDt;
+                    if (state.comboTimer <= 0) state.combo = 0;
+                }
+
+                // Разгон и продвижение вперёд (с ускорением во время рывка и Overdrive)
+                state.speed = Math.min(state.maxSpeed, state.speed + worldDt * 0.35);
+                const dashMultiplier = state.dashTimer > 0 ? 2.15 : (state.combo >= 5 ? 1.12 : 1.0);
+                const moveZ = state.speed * dashMultiplier * worldDt;
+                playerGroup.position.z -= moveZ;
+                state.distance += moveZ * 0.45;
+
+                // Горизонт мегаполиса и скоростные частицы дождя движутся вместе с игроком
+                skylineGroup.position.z = playerGroup.position.z;
+                for (const drop of speedDrops) {
+                    drop.position.z += (state.speed * 1.9) * rawDt;
+                    if (drop.position.z > playerGroup.position.z + 8) {
+                        drop.position.z = playerGroup.position.z - 95 - Math.random() * 35;
+                        drop.position.x = playerGroup.position.x + (Math.random() - 0.5) * 20;
+                    }
+                }
+
+                // Расход / регенерация энергии Сандевистана
+                if (state.sandyActive) {
+                    state.energy -= 28 * rawDt;
+                    if (state.energy <= 0) {
+                        state.energy = 0;
+                        toggleSandy();
+                    }
+                } else {
+                    state.energy = Math.min(state.maxEnergy, state.energy + 12 * rawDt);
+                }
+
+                // Плавное перестроение между полосами с наклоном корпуса
+                const diffX = hero.targetX - playerGroup.position.x;
+                playerGroup.position.x += diffX * Math.min(1, rawDt * 14);
+                playerGroup.rotation.z = -diffX * 0.08;
+
+                // Физика прыжка
+                if (hero.jumping) {
+                    hero.y += hero.vy * rawDt;
+                    hero.vy -= 46 * rawDt;
+                    if (hero.y <= 0) {
+                        hero.y = 0;
+                        hero.vy = 0;
+                        hero.jumping = false;
+                    }
+                }
+
+                // Подкат
+                if (hero.sliding) {
+                    hero.slideTime -= rawDt;
+                    playerGroup.scale.set(1.05, 0.48, 1.05);
+                    if (hero.slideTime <= 0) {
+                        hero.sliding = false;
+                        playerGroup.scale.set(1, 1, 1);
+                    }
+                } else {
+                    playerGroup.scale.set(1, 1, 1);
+                }
+                playerGroup.position.y = hero.y;
+
+                // Полноценная шарнирная биомеханика бега (сгиб коленей, локтей, наклон и скручивание торса)
+                const cycle = now * 0.017;
+                const lSin = Math.sin(cycle);
+                const rSin = Math.sin(cycle + Math.PI);
+
+                if (!hero.jumping && !hero.sliding) {
+                    leftLeg.rotation.x = lSin * 0.85;
+                    rightLeg.rotation.x = rSin * 0.85;
+                    // Колени сгибаются назад при переносе ноги
+                    leftLeg.userData.shin.rotation.x = -Math.max(0, -lSin) * 1.15 - 0.12;
+                    rightLeg.userData.shin.rotation.x = -Math.max(0, -rSin) * 1.15 - 0.12;
+
+                    // Правая рука удерживает винтовку с гашением отдачи
+                    rightArm.rotation.x = 0.25 + lSin * 0.1;
+                    rightArm.userData.forearm.rotation.x = 0.35 + (muzzleFlash.material.opacity * 0.22);
+
+                    // Динамический наклон корпуса вперёд и поворот плеч
+                    torso.rotation.x = state.dashTimer > 0 ? -0.42 : -0.18;
+                    torso.rotation.y = lSin * 0.14;
+                    PelvisNode.position.y = 1.0 + Math.abs(Math.cos(cycle)) * 0.07;
+
+                    // Неоновые следы от кроссовок на мокром асфальте
+                    hero.trailTimer -= rawDt;
+                    if (hero.trailTimer <= 0) {
+                        hero.trailTimer = state.sandyActive || state.dashTimer > 0 ? 0.035 : 0.075;
+                        const footSide = lSin > 0 ? -0.18 : 0.18;
+                        const trail = new THREE.Mesh(
+                            new THREE.BoxGeometry(0.18, 0.04, 0.65),
+                            state.sandyActive ? neonCyanMat : neonPinkMat
+                        );
+                        trail.position.set(playerGroup.position.x + footSide, 0.03, playerGroup.position.z + 0.4);
+                        scene.add(trail);
+                        particles.push({ mesh: trail, vel: new THREE.Vector3(0, 0, 0), life: 0.28 });
+                    }
+                } else if (hero.jumping) {
+                    leftLeg.rotation.x = 0.55;
+                    leftLeg.userData.shin.rotation.x = -0.95;
+                    rightLeg.rotation.x = -0.25;
+                    rightLeg.userData.shin.rotation.x = -0.65;
+                    torso.rotation.x = -0.24;
+                }
+
+                // Анимация левой руки и взмаха катаны (работает и на бегу, и в прыжке, и в подкате)
+                if (state.katanaTimer > 0) {
+                    const p = 1 - (state.katanaTimer / state.katanaDuration); // прогресс удара 0..1
+                    const easeOut = 1 - Math.pow(1 - p, 3);
+                    const dirSign = state.slashComboStep === 0 ? 1 : -1;
+                    const sweepAngle = (-1.25 + easeOut * 2.5) * dirSign;
+
+                    // Разворот корпуса за клинком
+                    torso.rotation.y = -sweepAngle * 0.45;
+                    torso.rotation.x = -0.28;
+
+                    // Вынос плеча вперёд и горизонтально-диагональная дуга перед собой
+                    leftArm.rotation.x = 1.38;
+                    leftArm.rotation.y = -sweepAngle * 0.95;
+                    leftArm.rotation.z = -0.35 * dirSign;
+                    leftArm.userData.forearm.rotation.x = 0.22;
+
+                    // Доворот кисти так, чтобы лезвие резало воздух по дуге впереди героя
+                    drawnKatanaGroup.rotation.set(0.35, 0, dirSign * 0.45);
+                } else {
+                    leftArm.rotation.x = rSin * 0.65;
+                    leftArm.rotation.y = 0;
+                    leftArm.rotation.z = 0.08;
+                    leftArm.userData.forearm.rotation.x = 0.55 + Math.max(0, rSin) * 0.45;
+                    drawnKatanaGroup.rotation.set(0, 0, 0);
+                }
+
+                // Затухание дульной вспышки и взмаха катаны
+                if (muzzleFlash.material.opacity > 0) {
+                    muzzleFlash.material.opacity = Math.max(0, muzzleFlash.material.opacity - rawDt * 12);
+                }
+                if (state.katanaTimer > 0) {
+                    state.katanaTimer -= rawDt;
+                    const p = 1 - Math.max(0, state.katanaTimer / state.katanaDuration);
+                    const dirSign = state.slashComboStep === 0 ? 1 : -1;
+                    // Быстрый пролёт полумесяца по дуге рассечения + плавное исчезновение
+                    katanaSlashArc.rotation.y = (-1.1 + p * 2.2) * dirSign;
+                    const fade = Math.sin(p * Math.PI);
+                    katanaSlashArc.userData.outerMat.opacity = fade * 0.9;
+                    katanaSlashArc.userData.innerMat.opacity = fade * 0.75;
+                    katanaSlashArc.scale.setScalar(0.88 + p * 0.28);
+
+                    if (state.katanaTimer <= 0) {
+                        katanaSlashArc.userData.outerMat.opacity = 0;
+                        katanaSlashArc.userData.innerMat.opacity = 0;
+                        katanaSlashArc.visible = false;
+                        drawnKatanaGroup.visible = false;
+                        katanaHiltInSheath.visible = true;
+                    }
+                } else if (katanaSlashArc.visible) {
+                    katanaSlashArc.userData.outerMat.opacity = 0;
+                    katanaSlashArc.userData.innerMat.opacity = 0;
+                    katanaSlashArc.visible = false;
+                }
+
+                // Автоматическая стрельба при удержании
+                if (state.firing && now - state.lastShot > 135) {
+                    fireWeapon();
+                    state.lastShot = now;
+                }
+
+                // Бесконечная перестановка сегментов города и спавн новых волн
+                for (const seg of segments) {
+                    if (seg.position.z > playerGroup.position.z + SEG_LENGTH * 0.85) {
+                        const minZ = Math.min(...segments.map(s => s.position.z));
+                        seg.position.z = minZ - SEG_LENGTH;
+                        spawnEncounterWave(seg.position.z + 16);
+                        spawnEncounterWave(seg.position.z - 12);
+                    }
+                }
+
+                // Движение летающих машин в небе
+                for (const fc of flyingCars) {
+                    fc.mesh.position.z += fc.speed * worldDt;
+                    if (fc.mesh.position.z > playerGroup.position.z + 25) {
+                        fc.mesh.position.z = playerGroup.position.z - 240 - Math.random() * 60;
+                        fc.mesh.position.x = (Math.random() - 0.5) * 34;
+                    }
+                }
+
+                const pPos = playerGroup.position;
+
+                // Проверка препятствий
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    const o = obstacles[i];
+                    if (o.z > pPos.z + 18) {
+                        scene.remove(o.mesh);
+                        obstacles.splice(i, 1);
+                        continue;
+                    }
+                    const dz = Math.abs(pPos.z - o.z);
+                    const dx = Math.abs(pPos.x - LANES[o.lane]);
+                    if (!o.hit && dz < 1.35 && dx < 1.15) {
+                        let avoided = false;
+                        if (o.type === 'JUMP' && hero.y > 0.85) avoided = true;
+                        if (o.type === 'SLIDE' && hero.sliding) avoided = true;
+                        if (state.dashTimer > 0) {
+                            // Во время Кибер-Рывка герой пробивает баррикаду без урона
+                            avoided = true;
+                            o.hit = true;
+                            spawnSparks(o.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0)), 0x00f0ff, 22);
+                            scene.remove(o.mesh);
+                            obstacles.splice(i, 1);
+                            continue;
+                        }
+
+                        if (!avoided) {
+                            o.hit = true;
+                            takeDamage(45);
+                            spawnSparks(pPos.clone().add(new THREE.Vector3(0, 1.2, -1)), 0xff2a6d, 18);
+                        }
+                    }
+                }
+
+                // Сбор золотых кредитов и энергетических/медицинских капсул
+                for (let i = coins.length - 1; i >= 0; i--) {
+                    const c = coins[i];
+                    c.mesh.rotation.y += rawDt * 3.5;
+                    if (c.z > pPos.z + 15) {
+                        scene.remove(c.mesh);
+                        coins.splice(i, 1);
+                        continue;
+                    }
+                    if (!c.taken && pPos.distanceTo(c.mesh.position) < 1.95) {
+                        c.taken = true;
+                        if (c.kind === 'HP') {
+                            state.hp = Math.min(state.maxHp, state.hp + 65);
+                            audio.pickup();
+                            spawnSparks(c.mesh.position, 0xff2a6d, 14);
+                            spawnFloatingText(c.mesh.position, '+65 HP', '#ff2a6d');
+                        } else if (c.kind === 'ENERGY') {
+                            state.energy = Math.min(state.maxEnergy, state.energy + 45);
+                            audio.pickup();
+                            spawnSparks(c.mesh.position, 0x00f0ff, 14);
+                            spawnFloatingText(c.mesh.position, '+45 ENERGY', '#00f0ff');
+                        } else {
+                            state.coins += 1;
+                            audio.coin();
+                            spawnSparks(c.mesh.position, 0xffd166, 8);
+                        }
+                        scene.remove(c.mesh);
+                        coins.splice(i, 1);
+                    }
+                }
+
+                // Враги и их выстрелы
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const e = enemies[i];
+                    if (e.z > pPos.z + 15) {
+                        scene.remove(e.mesh);
+                        enemies.splice(i, 1);
+                        continue;
+                    }
+                    e.attackCooldown -= worldDt;
+                    const distZ = pPos.z - e.z;
+                    if (e.attackCooldown <= 0 && distZ > 4 && distZ < 16 && hero.lane === e.lane) {
+                        e.attackCooldown = 2.0;
+                        takeDamage(25);
+                    }
+                    // Прямое столкновение с врагом
+                    if (Math.abs(distZ) < 1.2 && Math.abs(pPos.x - LANES[e.lane]) < 1.15) {
+                        takeDamage(40);
+                        spawnSparks(e.mesh.position, 0xff2200, 18);
+                        scene.remove(e.mesh);
+                        enemies.splice(i, 1);
+                    }
+                }
+
+                // Полёт пуль и попадания по врагам
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
+                    b.mesh.position.addScaledVector(b.dir, b.speed * rawDt);
+                    b.life -= rawDt;
+
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const e = enemies[j];
+                        const hitCenter = e.mesh.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+                        if (b.mesh.position.distanceTo(hitCenter) < 1.55) {
+                            e.hp -= b.dmg;
+                            if (e.mesh.userData.hpBar) {
+                                e.mesh.userData.hpBar.scale.x = Math.max(0.01, e.hp / 60);
+                            }
+                            b.life = 0;
+                            spawnSparks(b.mesh.position, 0x00f0ff, 9);
+                            spawnFloatingText(hitCenter, `-${b.dmg}`, '#00f0ff');
+                            if (e.hp <= 0) {
+                                registerEnemyKill(e.mesh.position, false);
+                                scene.remove(e.mesh);
+                                enemies.splice(j, 1);
+                            }
+                            break;
+                        }
+                    }
+
+                    if (b.life <= 0) {
+                        scene.remove(b.mesh);
+                        bullets.splice(i, 1);
+                    }
+                }
+
+                updateTargetLock();
+                syncHUD();
+            }
+
+            // Анимация разлетающихся искр
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.mesh.position.addScaledVector(p.vel, rawDt);
+                p.life -= rawDt;
+                p.mesh.scale.multiplyScalar(0.92);
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Кинематографичная камера от 3-го лица + динамический FOV при ускорении
+            const targetFov = state.dashTimer > 0 ? 78 : (state.sandyActive ? 72 : 65);
+            if (Math.abs(camera.fov - targetFov) > 0.1) {
+                camera.fov += (targetFov - camera.fov) * 0.15;
+                camera.updateProjectionMatrix();
+            }
+
+            if (state.shake > 0) state.shake = Math.max(0, state.shake - rawDt * 2.2);
+            const shakeOffset = state.shake > 0 ? (Math.random() - 0.5) * state.shake : 0;
+
+            const desiredCamX = playerGroup.position.x * 0.55 + 0.55 + shakeOffset;
+            const desiredCamY = playerGroup.position.y * 0.35 + (state.sandyActive ? 2.45 : 2.85) + shakeOffset;
+            const desiredCamZ = playerGroup.position.z + (state.sandyActive ? 4.9 : 5.7);
+
+            camera.position.x += (desiredCamX - camera.position.x) * 0.14;
+            camera.position.y += (desiredCamY - camera.position.y) * 0.14;
+            camera.position.z += (desiredCamZ - camera.position.z) * 0.25;
+
+            camera.lookAt(
+                playerGroup.position.x * 0.35,
+                playerGroup.position.y * 0.2 + 2.1,
+                playerGroup.position.z - 22
+            );
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
